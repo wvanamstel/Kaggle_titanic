@@ -69,6 +69,7 @@ table(pred_rpart, vali$Survived)
 confusionMatrix(pred_rpart, vali$Survived)
 ## accuracy = 0.7782
 
+## apply model to test data
 pred_rpart_test <- predict(mod_rpart, newdata=ti_test)
 Submission(ti_test$PassengerId, pred_rpart_test, "simpletree.cvs")
 
