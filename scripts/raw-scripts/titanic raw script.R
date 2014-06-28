@@ -26,7 +26,7 @@ ti_test <- readData('../../data/raw-data/test.csv', column.types, missing.types)
 #######################################################################
 ### examine the data
 #######################################################################
-
+require(ggplot2)
 names(ti_train)
 str(ti_train)
 head(ti_train)
@@ -50,15 +50,26 @@ missmap(df.train, main="Titanic Training Data - Missings Map",
         col=c("yellow", "black"), legend=FALSE)
 
 #######################################################################
+### dealing with missing data points
+#######################################################################
+#only 2 missing values in the embarked feature
+ti_train$Embarked[which(is.na(ti_train$Embarked))] <- 'S' 
+
+#impute the missing ages based on titles
+summary(ti_train$Age)
+
+
+#######################################################################
 ### Simple regression tree
 #######################################################################
-require(ggplot2)
 require(caret)
 set.seed(23)
 in_train <- createDataPartition(y=ti_train$Survived, p=0.70, list=FALSE)
 training <- ti_train[in_train,]
 vali <- ti_train[-in_train,]
-mod_rpart <- train(Survived ~ Sex + Pclass, method='rpart', data=training)
+
+##fit regression tree model
+mod_rpart <- train(Survived ~ SibSp + Sex, method='rpart', data=training)
 print(mod_rpart$finalModel)
 require(rattle)
 fancyRpartPlot(mod_rpart$finalModel)
@@ -67,7 +78,15 @@ pred_rpart <- predict(mod_rpart, newdata=vali)
 vali$rpart_right <- pred_rpart == vali$Survived
 table(pred_rpart, vali$Survived)
 confusionMatrix(pred_rpart, vali$Survived)
-## accuracy = 0.7782
+## accuracy = 0.7782 only sex feature is used
+
+##using plain random forest
+require(doMC)
+registerDoMC(2)
+tr_control <- trainControl(allowParallel=TRUE)
+mod_rf <- train(Survived ~ Sex + Pclass, method='rf', data=training)
+pred_rf <- predict(mod_rf, newdata=vali)
+confusionMatrix(pred_rf, vali$Survived)
 
 ## apply model to test data
 pred_rpart_test <- predict(mod_rpart, newdata=ti_test)
