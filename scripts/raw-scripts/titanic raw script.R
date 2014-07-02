@@ -1,5 +1,8 @@
 source('./titanic-functions.R')
-
+require(ggplot2)
+require(caret)
+require(rattle)
+require(Hmisc)
 #######################################################################
 ### Read the data
 #######################################################################
@@ -21,13 +24,10 @@ orig_train <- readData('../../data/raw-data/train.csv', column.types, missing.ty
 column.types <- column.types[-2]
 orig_test <- readData('../../data/raw-data/test.csv', column.types, missing.types)
 
-ti_train <- orig_train
-ti_test <- orig_test
 #######################################################################
 ### examine the data
 #######################################################################
-require(ggplot2)
-require(caret)
+ti_train <- orig_train
 names(ti_train)
 str(ti_train)
 head(ti_train)
@@ -127,7 +127,7 @@ temp <- ti_train[with(ti_train, order(ti_train$Surname)),]
 
 ti_train <- extraFeatures(ti_train)
 
-features_to_use <- c("Fate", "Sex", "Priority", "Age", "Title", "Pclass",
+features_to_use <- c("Survived", "Sex", "Priority", "Age", "Title", "Pclass",
                      "Deck", "Side", "Fare", "Fare_pp", "Embarked", "Family")
 
 ti_train_mung <- ti_train[features_to_use]
@@ -136,35 +136,69 @@ ti_train_mung <- ti_train[features_to_use]
 ### Simple regression tree
 #######################################################################
 set.seed(23)
-in_train <- createDataPartition(y=ti_train$Survived, p=0.70, list=FALSE)
-training <- ti_train[in_train,]
-vali <- ti_train[-in_train,]
+in_train <- createDataPartition(y=ti_train_mung$Survived, p=0.75, list=FALSE)
+training <- ti_train_mung[in_train,]
+vali <- ti_train_mung[-in_train,]
 
 ##fit regression tree model
-mod_rpart <- train(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Surname, method='rpart', data=training)
+mod_rpart <- train(Survived ~ ., method='rpart', data=training)
 print(mod_rpart$finalModel)
 require(rattle)
 fancyRpartPlot(mod_rpart$finalModel)
 #something odd going on?
 pred_rpart <- predict(mod_rpart, newdata=vali)
 vali$rpart_right <- pred_rpart == vali$Survived
-table(pred_rpart, vali$Survived)
+table(pred_rpart, vali$Fate)
 confusionMatrix(pred_rpart, vali$Survived)
 ## accuracy = 0.7782 only sex feature is used
 
 ##using plain random forest
 require(doMC)
 registerDoMC(2)
-mod_rf <- train(Survived ~ Age + Sex + Embarked, method='rf', data=training)
+mod_rf <- train(Survived ~ ., method='rf', data=training)
 pred_rf <- predict(mod_rf, newdata=vali)
 confusionMatrix(pred_rf, vali$Survived)
-
-## apply model to test data
-pred_rpart_test <- predict(mod_rpart, newdata=ti_test)
-Submission(ti_test$PassengerId, pred_rpart_test, "simplerf.cvs")
 
 #######################################################################
 ### Submissions
 #######################################################################
+#######################################################################
 
+#######################################################################
+### Munge test data
+#######################################################################
+ti_test <- orig_test
+ti_test$Title <- getTitle(ti_test)
 
+missing_titles <- c('Master', 'Miss', 'Mr', 'Mrs')
+#replace missing ages with median age based on title
+ti_test$Title <- changeTitles(ti_test, c("Ms"), "Miss")
+ti_test$Age <- imputeMedian(ti_test$Age, ti_test$Title, missing_titles)
+#replace 'Ms' title with median age from training set, only 1 Ms data point in test
+
+#investigate fare feature
+#replace 0 fares for median fare paid in applicable class
+ti_test$Fare[which(ti_test$Fare == 0)] <- NA
+ti_test$Fare <- imputeMedian(ti_test$Fare, ti_test$Pclass, 
+                              as.numeric(levels(ti_test$Pclass)))
+
+#Group titles
+ti_test$Title <- changeTitles(ti_test, c("Col", "Dona", "Dr", "Rev"),"Noble")
+ti_test$Title <- as.factor(ti_test$Title)
+
+#more feature engineering?
+ti_test$Surname <- getSurname(ti_test)
+ti_test$Surname <- as.factor(ti_test$Surname)
+
+ti_test <- extraFeatures(ti_test)
+
+features_to_use <- c("PassengerId", "Sex", "Priority", "Age", "Title", "Pclass",
+                     "Deck", "Side", "Fare", "Fare_pp", "Embarked", "Family")
+
+ti_test <- ti_test[features_to_use]
+
+#######################################################################
+### Run model on test data
+#######################################################################
+pred_test <- predict(mod_rf, newdata=ti_test)
+Submission(ti_test$PassengerId, pred_test, 'rfmunged')

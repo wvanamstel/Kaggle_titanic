@@ -45,8 +45,10 @@ isOdd <- function(x) x %in% c("1","3","5","7","9")
 extraFeatures <- function(data){
   require(plyr)
   require(stringr)
-  data$Fate <- data$Survived
-  data$Fate <- revalue(data$Fate, c("1" = "Survived", "0" = "Dead"))
+#   if (!test_data_passed){
+#     data$Fate <- data$Survived
+#     data$Fate <- revalue(data$Fate, c("1" = "Survived", "0" = "Dead"))
+#   }
   #women and children first in lifeboats
   data$Priority <- "No"
   data$Priority[which(data$Sex == "female" | data$Age < 16)] <- "Yes"
